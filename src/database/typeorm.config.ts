@@ -1,0 +1,44 @@
+import { registerAs } from '@nestjs/config';
+import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
+import { DailyBhavcopyRecordEntity } from '../market-data/entities/daily-bhavcopy-record.entity';
+import { MarketCapSnapshotEntity } from '../universe/entities/market-cap-snapshot.entity';
+import { QuarterResultsEntity } from '../fundamentals-data/entities/quarter-results.entity';
+import { YoyResultsEntity } from '../fundamentals-data/entities/yoy-results.entity';
+import { BalanceSheetEntity } from '../fundamentals-data/entities/balance-sheet.entity';
+import { CashFlowEntity } from '../fundamentals-data/entities/cash-flow.entity';
+import { RatiosEntity } from '../fundamentals-data/entities/ratios.entity';
+import { ShareholdingPatternQuarterlyEntity } from '../fundamentals-data/entities/shareholding-pattern-quarterly.entity';
+import { ShareholdingPatternYearlyEntity } from '../fundamentals-data/entities/shareholding-pattern-yearly.entity';
+
+export default registerAs(
+  'database',
+  (): TypeOrmModuleOptions => ({
+    type: (process.env.DB_TYPE as 'postgres') || 'postgres',
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    username: process.env.DB_USERNAME || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres',
+    database: process.env.DB_NAME || 'postgres',
+    entities: [
+      DailyBhavcopyRecordEntity,
+      MarketCapSnapshotEntity,
+      QuarterResultsEntity,
+      YoyResultsEntity,
+      BalanceSheetEntity,
+      CashFlowEntity,
+      RatiosEntity,
+      ShareholdingPatternQuarterlyEntity,
+      ShareholdingPatternYearlyEntity,
+    ],
+    // Converts camelCase entity properties (tickerSymbol) to snake_case
+    // column names (ticker_symbol) — applies to every entity, not just this one.
+    namingStrategy: new SnakeNamingStrategy(),
+    synchronize:
+      process.env.DB_SYNCHRONIZE !== 'false' &&
+      process.env.NODE_ENV !== 'production' &&
+      process.env.NODE_ENV !== 'prod',
+    autoLoadEntities: false,
+    logging: process.env.NODE_ENV !== 'production',
+  }),
+);

@@ -1,0 +1,127 @@
+import { Inject, Injectable } from '@nestjs/common';
+import {
+  FUNDAMENTALS_DATA_SERVICE,
+  MARKET_DATA_SERVICE,
+  UNIVERSE_SERVICE,
+} from '../common/constants/provider-tokens';
+import { MarketDataPort } from '../market-data/interfaces/market-data-port.interface';
+import { FundamentalsPort } from '../fundamentals-data/interfaces/fundamentals-port.interface';
+import { StoredFundamentalsAdapter } from '../fundamentals-data/adapters/stored-fundamentals.adapter';
+import { UniversePort } from '../universe/interfaces/universe-port.interface';
+import { evaluateTechnicalRules } from './rules/technical-rules';
+import { evaluateFundamentalRules } from './rules/fundamental-rules';
+import { evaluateChartPatternRules } from './rules/chart-pattern-rules';
+import { ScreeningRuleset } from './rules/screening-ruleset';
+import { ScreeningResultDto } from './dto/screening-result.dto';
+import { RoundOneResultDto } from './dto/round-one-result.dto';
+import { RoundTwoResultDto } from './dto/round-two-result.dto';
+
+const HISTORY_LOOKBACK_DAYS = 400; // enough for 200DMA + 8-week-old 200DMA + 52wk hi/lo
+const MIN_FUNDAMENTAL_RULES_TO_PASS = 2; // out of 3 — round 2 is not a strict all-must-pass gate
+
+@Injectable()
+export class ScreeningService {
+  private readonly ruleset = new ScreeningRuleset();
+
+  constructor(
+    @Inject(MARKET_DATA_SERVICE) private readonly marketData: MarketDataPort,
+    @Inject(FUNDAMENTALS_DATA_SERVICE) private readonly fundamentalsData: FundamentalsPort,
+    @Inject(UNIVERSE_SERVICE) private readonly universe: UniversePort,
+    private readonly storedFundamentals: StoredFundamentalsAdapter,
+  ) {}
+
+  async screen(): Promise<ScreeningResultDto[]> {
+    const symbols = await this.universe.getSymbols();
+    const results = await Promise.all(symbols.map((entry) => this.screenSymbol(entry.symbol, entry.companyName, entry.marketCapCr)));
+    return results.sort((a, b) => b.score - a.score);
+  }
+
+  /**
+   * "Round 1" — technical rules only, as a strict pass/fail gate. Doesn't
+   * touch fundamentals data at all (that data isn't real yet), so this is
+   * cheaper than screen() and independently useful until round 2 exists.
+   */
+  async screenRoundOne(): Promise<RoundOneResultDto[]> {
+    const symbols = await this.universe.getSymbols();
+    const results = await Promise.all(
+      symbols.map(async (entry) => {
+        const bars = await this.fetchBars(entry.symbol);
+        const technicalRules = evaluateTechnicalRules(bars, entry.marketCapCr, this.ruleset);
+        return {
+          symbol: entry.symbol,
+          companyName: entry.companyName,
+          marketCapCr: entry.marketCapCr,
+          technicalRules,
+        };
+      }),
+    );
+
+    return results
+      .filter((r) => r.technicalRules.every((rule) => rule.passed))
+      .sort((a, b) => b.marketCapCr - a.marketCapCr);
+  }
+
+  /**
+   * "Round 2" — round-1 passers whose STORED fundamentals clear at least
+   * MIN_FUNDAMENTAL_RULES_TO_PASS of the (3) fundamental rules — NOT a
+   * strict all-must-pass gate, unlike round 1. See _docs/DECISIONS.md and
+   * _docs/architecture/rounds.md for why. Always reads quarter_results via
+   * StoredFundamentalsAdapter, never the live API — safe to call as often
+   * as needed regardless of the indianapi.in rate limit. Run
+   * scripts/pull-fundamentals.ts first to (re)populate storage for the
+   * current round-1 list.
+   */
+  async screenRoundTwo(): Promise<RoundTwoResultDto[]> {
+    const roundOnePassers = await this.screenRoundOne();
+
+    const results = await Promise.all(
+      roundOnePassers.map(async (entry) => {
+        const quarters = await this.storedFundamentals.getQuarterlyFinancials(entry.symbol);
+        const fundamentalRules = evaluateFundamentalRules(quarters, this.ruleset);
+        return { ...entry, fundamentalRules };
+      }),
+    );
+
+    return results
+      .filter((r) => r.fundamentalRules.filter((rule) => rule.passed).length >= MIN_FUNDAMENTAL_RULES_TO_PASS)
+      .sort((a, b) => b.marketCapCr - a.marketCapCr);
+  }
+
+  private async fetchBars(symbol: string) {
+    const toDate = new Date().toISOString().slice(0, 10);
+    const fromDate = new Date(Date.now() - HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    return this.marketData.getDailyHistory(symbol, fromDate, toDate);
+  }
+
+  private async screenSymbol(
+    symbol: string,
+    companyName: string,
+    marketCapCr: number,
+  ): Promise<ScreeningResultDto> {
+    const [bars, quarters] = await Promise.all([
+      this.fetchBars(symbol),
+      this.fundamentalsData.getQuarterlyFinancials(symbol),
+    ]);
+
+    const technicalRules = evaluateTechnicalRules(bars, marketCapCr, this.ruleset);
+    const fundamentalRules = evaluateFundamentalRules(quarters, this.ruleset);
+    const chartPatternRules = evaluateChartPatternRules(bars, this.ruleset);
+
+    const allRules = [...technicalRules, ...fundamentalRules, ...chartPatternRules];
+    const passedCount = allRules.filter((r) => r.passed).length;
+
+    return {
+      symbol,
+      companyName,
+      marketCapCr,
+      technicalRules,
+      fundamentalRules,
+      chartPatternRules,
+      passedCount,
+      totalCount: allRules.length,
+      score: allRules.length > 0 ? passedCount / allRules.length : 0,
+    };
+  }
+}
