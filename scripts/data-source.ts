@@ -17,13 +17,22 @@ import { ShareholdingPatternYearlyEntity } from '../src/fundamentals-data/entiti
  * src/database/typeorm.config.ts / docker-compose.yml — must stay in sync
  * with that file's naming strategy so both point at the same column names.
  */
+const connectionOptions = process.env.DATABASE_URL
+  ? {
+      url: process.env.DATABASE_URL,
+      ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false },
+    }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432', 10),
+      username: process.env.DB_USERNAME || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres',
+      database: process.env.DB_NAME || 'postgres',
+    };
+
 export const scriptDataSource = new DataSource({
   type: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  username: process.env.DB_USERNAME || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  database: process.env.DB_NAME || 'postgres',
+  ...connectionOptions,
   entities: [
     DailyBhavcopyRecordEntity,
     MarketCapSnapshotEntity,

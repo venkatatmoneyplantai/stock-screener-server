@@ -11,15 +11,27 @@ import { RatiosEntity } from '../fundamentals-data/entities/ratios.entity';
 import { ShareholdingPatternQuarterlyEntity } from '../fundamentals-data/entities/shareholding-pattern-quarterly.entity';
 import { ShareholdingPatternYearlyEntity } from '../fundamentals-data/entities/shareholding-pattern-yearly.entity';
 
+// Supabase (and most managed Postgres hosts) hand you a single connection
+// string rather than discrete host/port/user vars. Prefer it when present;
+// fall back to the discrete vars for local Docker Postgres.
+const connectionOptions: Partial<TypeOrmModuleOptions> = process.env.DATABASE_URL
+  ? {
+      url: process.env.DATABASE_URL,
+      ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false },
+    }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432', 10),
+      username: process.env.DB_USERNAME || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres',
+      database: process.env.DB_NAME || 'postgres',
+    };
+
 export default registerAs(
   'database',
   (): TypeOrmModuleOptions => ({
     type: (process.env.DB_TYPE as 'postgres') || 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    username: process.env.DB_USERNAME || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: process.env.DB_NAME || 'postgres',
+    ...connectionOptions,
     entities: [
       DailyBhavcopyRecordEntity,
       MarketCapSnapshotEntity,
