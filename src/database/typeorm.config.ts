@@ -18,6 +18,10 @@ const connectionOptions: Partial<TypeOrmModuleOptions> = process.env.DATABASE_UR
   ? {
       url: process.env.DATABASE_URL,
       ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false },
+      // Without this, a blocked port or bad host hangs forever instead of
+      // failing fast — Vercel functions have no visibility into why a
+      // stuck connection never resolved.
+      extra: { connectionTimeoutMillis: 8000 },
     }
   : {
       host: process.env.DB_HOST || 'localhost',
