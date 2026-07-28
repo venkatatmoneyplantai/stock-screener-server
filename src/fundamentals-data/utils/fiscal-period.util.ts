@@ -29,6 +29,12 @@ export function monthYearToFiscalPeriod(label: string): { periodLabel: string; p
   };
 }
 
+/** "Mar 2023" -> "FY23". For annual (yoy_results) periods, which are always fiscal-year-end months. */
+export function monthYearToFiscalYearLabel(label: string): string {
+  const { periodLabel } = monthYearToFiscalPeriod(label);
+  return periodLabel.slice(3); // "Q4 FY23" -> "FY23"
+}
+
 /** Sortable key for a "Mon YYYY" label — higher means more recent. Ignores non-conforming labels like "TTM". */
 export function monthYearSortKey(label: string): number {
   const [monthName, yearStr] = label.split(' ');

@@ -116,12 +116,12 @@ just the server-side half of each.
 | # | Item | Notes |
 | --- | --- | --- |
 | [x] 2 | Rank Round 1 by strength (closest to 52-week high first) | Done — `percentOf52WeekHigh` added to `RoundOneResultDto`/`RoundTwoResultDto`, `screenRoundOne()` now sorts by it descending instead of market cap |
-| 3 | EPS for the last 4 years AND last 8 quarters, for every Round 2 stock | Quarterly (8Q): already have it — confirmed 13 quarters stored per stock in `quarter_results` (e.g. ADANIENT: Mar 2023–Mar 2026). Annual (4Y): not pulled yet, but `IndianApiAdapter.getYoyResults()` is already implemented and unused, and `yoy_results` already exists as a table (confirmed 0 rows) — this is wiring up an existing method + a new pull step, not a new integration. Whatever gets pulled also needs pushing to Supabase (production), not just local — same as how `quarter_results` got there in the original migration; running the new pull script once pointed at `DATABASE_URL=<Supabase>` would do it directly |
+| [blocked] 3 | EPS for the last 4 years AND last 8 quarters, for every Round 2 stock | All code is written and builds clean: `scripts/pull-yoy-fundamentals.ts`, `StoredFundamentalsAdapter.getQuarterlyEpsHistory()`/`getAnnualEpsHistory()`, `EpsHistoryDto`, wired into `screenRoundTwo()`. Blocked on data: indianapi.in is currently returning `{"info":"Not a valid script_code"}` (HTTP 200) for EVERY request — confirmed against 2 symbols (HFCL, ADANIENT) and 2 stat types (`quarter_results`, `yoy_results`), and confirmed our request shape (`stock_name` + `stats` params) exactly matches their published docs. This is an issue on their end, not our integration. Paused until resolved — existing `quarter_results` data (pulled weeks ago) is untouched and Round 2 keeps working off it in the meantime |
 | [skip] 6 | Sector name per stock (NSE publishes this) | Skipped for now, by request. Confirmed no existing source has it — not Bhavcopy, not any of the 7 indianapi.in stat types. Would need research into a free source covering the full ~3,000-symbol universe before starting |
 | [x] 7 | Configurable min/max market cap instead of the fixed ₹990 Cr floor | Done — `GET /screening/round-one` and `/round-two` accept `minCr`/`maxCr` query params (validated via `MarketCapFilterDto`), falling back to the ruleset default (990, no ceiling) if omitted. Per-request only, shared ruleset never mutated |
 
-2 and 7 are done. 6 is explicitly skipped for now. 3 remains — see the note
-on it above about what it actually needs.
+2 and 7 are done. 6 is explicitly skipped for now. 3 is code-complete but
+blocked on an external API issue — see the note on it above.
 
 ## Already done
 

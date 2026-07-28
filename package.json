@@ -20,7 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "backfill:bhavcopy": "ts-node scripts/pull-bhavcopy-history.ts",
     "pull:market-cap": "ts-node scripts/pull-market-cap.ts",
-    "pull:fundamentals": "ts-node scripts/pull-fundamentals.ts"
+    "pull:fundamentals": "ts-node scripts/pull-fundamentals.ts",
+    "pull:yoy-fundamentals": "ts-node scripts/pull-yoy-fundamentals.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

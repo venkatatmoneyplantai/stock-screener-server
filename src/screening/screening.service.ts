@@ -119,9 +119,14 @@ export class ScreeningService {
 
     const results = await Promise.all(
       roundOnePassers.map(async (entry) => {
-        const quarters = await this.storedFundamentals.getQuarterlyFinancials(entry.symbol);
+        const [quarters, quarterlyEps, annualEps] = await Promise.all([
+          this.storedFundamentals.getQuarterlyFinancials(entry.symbol),
+          this.storedFundamentals.getQuarterlyEpsHistory(entry.symbol),
+          this.storedFundamentals.getAnnualEpsHistory(entry.symbol),
+        ]);
         const fundamentalRules = evaluateFundamentalRules(quarters, this.ruleset);
-        return { ...entry, fundamentalRules };
+        const epsHistory = { quarterly: quarterlyEps, annual: annualEps };
+        return { ...entry, fundamentalRules, epsHistory };
       }),
     );
 

@@ -9,9 +9,10 @@ import { DummyFundamentalsAdapter } from './adapters/dummy-fundamentals.adapter'
 import { FundamentalsDataService } from './fundamentals-data.service';
 import { FundamentalsPort } from './interfaces/fundamentals-port.interface';
 import { QuarterResultsEntity } from './entities/quarter-results.entity';
+import { YoyResultsEntity } from './entities/yoy-results.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([QuarterResultsEntity])],
+  imports: [TypeOrmModule.forFeature([QuarterResultsEntity, YoyResultsEntity])],
   providers: [
     NseXbrlAdapter,
     IndianApiAdapter,
