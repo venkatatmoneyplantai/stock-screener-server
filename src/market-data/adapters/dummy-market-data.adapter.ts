@@ -26,6 +26,18 @@ export class DummyMarketDataAdapter implements MarketDataPort {
     return bars;
   }
 
+  async getDailyHistoryForSymbols(
+    symbols: string[],
+    fromDate: string,
+    toDate: string,
+  ): Promise<Map<string, DailyBar[]>> {
+    const map = new Map<string, DailyBar[]>();
+    for (const symbol of symbols) {
+      map.set(symbol, await this.getDailyHistory(symbol, fromDate, toDate));
+    }
+    return map;
+  }
+
   async getBarsForDate(date: string): Promise<DailyBar[]> {
     return [
       { symbol: 'DUMMY', date, open: 100, high: 102, low: 99, close: 101, volume: 100000 },

@@ -43,18 +43,27 @@ export class ScreeningService {
    */
   async screenRoundOne(): Promise<RoundOneResultDto[]> {
     const symbols = await this.universe.getSymbols();
-    const results = await Promise.all(
-      symbols.map(async (entry) => {
-        const bars = await this.fetchBars(entry.symbol);
-        const technicalRules = evaluateTechnicalRules(bars, entry.marketCapCr, this.ruleset);
-        return {
-          symbol: entry.symbol,
-          companyName: entry.companyName,
-          marketCapCr: entry.marketCapCr,
-          technicalRules,
-        };
-      }),
+    const { fromDate, toDate } = this.historyRange();
+    // One query for the whole universe, not one per symbol — 3000+
+    // individual round trips is what was timing this out against a
+    // remote DB (fine against near-zero-latency local Postgres, not fine
+    // against a real network hop to Supabase).
+    const barsBySymbol = await this.marketData.getDailyHistoryForSymbols(
+      symbols.map((entry) => entry.symbol),
+      fromDate,
+      toDate,
     );
+
+    const results = symbols.map((entry) => {
+      const bars = barsBySymbol.get(entry.symbol) ?? [];
+      const technicalRules = evaluateTechnicalRules(bars, entry.marketCapCr, this.ruleset);
+      return {
+        symbol: entry.symbol,
+        companyName: entry.companyName,
+        marketCapCr: entry.marketCapCr,
+        technicalRules,
+      };
+    });
 
     return results
       .filter((r) => r.technicalRules.every((rule) => rule.passed))
@@ -87,11 +96,16 @@ export class ScreeningService {
       .sort((a, b) => b.marketCapCr - a.marketCapCr);
   }
 
-  private async fetchBars(symbol: string) {
+  private historyRange(): { fromDate: string; toDate: string } {
     const toDate = new Date().toISOString().slice(0, 10);
     const fromDate = new Date(Date.now() - HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
+    return { fromDate, toDate };
+  }
+
+  private async fetchBars(symbol: string) {
+    const { fromDate, toDate } = this.historyRange();
     return this.marketData.getDailyHistory(symbol, fromDate, toDate);
   }
 

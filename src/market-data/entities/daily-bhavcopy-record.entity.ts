@@ -18,6 +18,10 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 
  */
 @Entity('daily_bhavcopy_records')
 @Index(['tickerSymbol', 'tradeDate'], { unique: true })
+// Screening reads history for the whole universe in one date-range query
+// (see NseBhavcopyAdapter.getDailyHistoryForSymbols) — the unique index
+// above is symbol-first, so it doesn't help a scan across all symbols.
+@Index(['tradeDate'])
 export class DailyBhavcopyRecordEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;

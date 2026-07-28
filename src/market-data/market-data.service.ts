@@ -11,6 +11,14 @@ export class MarketDataService implements MarketDataPort {
     return this.adapter.getDailyHistory(symbol, fromDate, toDate);
   }
 
+  getDailyHistoryForSymbols(
+    symbols: string[],
+    fromDate: string,
+    toDate: string,
+  ): Promise<Map<string, DailyBar[]>> {
+    return this.adapter.getDailyHistoryForSymbols(symbols, fromDate, toDate);
+  }
+
   getBarsForDate(date: string): Promise<DailyBar[]> {
     return this.adapter.getBarsForDate(date);
   }
