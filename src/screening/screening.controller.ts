@@ -1,9 +1,10 @@
-import { Controller, Get } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Query } from '@nestjs/common';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ScreeningService } from './screening.service';
 import { ScreeningResultDto } from './dto/screening-result.dto';
 import { RoundOneResultDto } from './dto/round-one-result.dto';
 import { RoundTwoResultDto } from './dto/round-two-result.dto';
+import { MarketCapFilterDto } from './dto/market-cap-filter.dto';
 import { ResponseDto } from '../common/dto/response.dto';
 
 @ApiTags('Screening')
@@ -65,8 +66,10 @@ export class ScreeningController {
   @ApiOperation({
     summary: 'Round 1 — technical rules only, pass/fail gate',
     description:
-      'Evaluates only the technical (price/volume) rules from screening-rules.md against every symbol in the current universe, and returns just the symbols that pass every single one — not a ranked list. Fundamentals ("round 2") are not evaluated here — see GET /screening/round-two.',
+      'Evaluates only the technical (price/volume) rules from screening-rules.md against every symbol in the current universe, and returns just the symbols that pass every single one — sorted by strength (closest to 52-week high first). Fundamentals ("round 2") are not evaluated here — see GET /screening/round-two. Pass minCr/maxCr to override the default market-cap floor (990 Cr, no ceiling) for this request only.',
   })
+  @ApiQuery({ name: 'minCr', required: false, type: Number, description: 'Minimum market cap in Crore (default 990)' })
+  @ApiQuery({ name: 'maxCr', required: false, type: Number, description: 'Maximum market cap in Crore (default: no ceiling)' })
   @ApiResponse({
     status: 200,
     description: 'Symbols passing every technical rule, sorted by market cap (highest first)',
@@ -91,8 +94,8 @@ export class ScreeningController {
       },
     },
   })
-  async getRoundOneResults(): Promise<ResponseDto<RoundOneResultDto[]>> {
-    const results = await this.screeningService.screenRoundOne();
+  async getRoundOneResults(@Query() filter: MarketCapFilterDto): Promise<ResponseDto<RoundOneResultDto[]>> {
+    const results = await this.screeningService.screenRoundOne(filter.minCr, filter.maxCr);
     return ResponseDto.ok(results);
   }
 
@@ -100,8 +103,10 @@ export class ScreeningController {
   @ApiOperation({
     summary: 'Round 2 — round-1 passers whose stored fundamentals also pass, pass/fail gate',
     description:
-      'Takes the round-1 passers and evaluates the fundamental rules from screening-rules.md against each one, using STORED data from quarter_results (populated by scripts/pull-fundamentals.ts) — never a live API call. Returns only symbols passing every technical AND every fundamental rule. Run the pull script first if a symbol you expect is missing.',
+      'Takes the round-1 passers and evaluates the fundamental rules from screening-rules.md against each one, using STORED data from quarter_results (populated by scripts/pull-fundamentals.ts) — never a live API call. Returns only symbols passing every technical AND every fundamental rule. Run the pull script first if a symbol you expect is missing. Pass minCr/maxCr to override the default market-cap floor (990 Cr, no ceiling) for this request only — forwarded to round 1 internally.',
   })
+  @ApiQuery({ name: 'minCr', required: false, type: Number, description: 'Minimum market cap in Crore (default 990)' })
+  @ApiQuery({ name: 'maxCr', required: false, type: Number, description: 'Maximum market cap in Crore (default: no ceiling)' })
   @ApiResponse({
     status: 200,
     description: 'Symbols passing every technical and fundamental rule, sorted by market cap (highest first)',
@@ -132,8 +137,8 @@ export class ScreeningController {
       },
     },
   })
-  async getRoundTwoResults(): Promise<ResponseDto<RoundTwoResultDto[]>> {
-    const results = await this.screeningService.screenRoundTwo();
+  async getRoundTwoResults(@Query() filter: MarketCapFilterDto): Promise<ResponseDto<RoundTwoResultDto[]>> {
+    const results = await this.screeningService.screenRoundTwo(filter.minCr, filter.maxCr);
     return ResponseDto.ok(results);
   }
 }

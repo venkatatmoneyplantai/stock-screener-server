@@ -43,15 +43,18 @@ export class MovingAverageTrendRule implements ScreeningRule {
   }
 }
 
-/** Minimum market capitalisation, in Crore. */
+/** Market capitalisation bounds, in Crore. `maxCr` is optional — no ceiling if omitted. */
 export class MarketCapMinRule implements ScreeningRule {
   readonly category = RuleCategory.TECHNICAL;
   readonly id = 'market-cap-min';
 
-  constructor(readonly minCr: number) {}
+  constructor(
+    readonly minCr: number,
+    readonly maxCr?: number,
+  ) {}
 
   get label(): string {
-    return `Market cap >= ${this.minCr} Cr`;
+    return this.maxCr !== undefined ? `Market cap between ${this.minCr} Cr and ${this.maxCr} Cr` : `Market cap >= ${this.minCr} Cr`;
   }
 }
 

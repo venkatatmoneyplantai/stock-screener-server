@@ -13,6 +13,7 @@ import { fiftyTwoWeekHigh } from '../indicators/week52.util';
 import { evaluateFundamentalRules } from './rules/fundamental-rules';
 import { evaluateChartPatternRules } from './rules/chart-pattern-rules';
 import { ScreeningRuleset } from './rules/screening-ruleset';
+import { MarketCapMinRule } from './rules/rule-types';
 import { ScreeningResultDto } from './dto/screening-result.dto';
 import { RoundOneResultDto } from './dto/round-one-result.dto';
 import { RoundTwoResultDto } from './dto/round-two-result.dto';
@@ -41,15 +42,31 @@ export class ScreeningService {
    * "Round 1" — technical rules only, as a strict pass/fail gate. Doesn't
    * touch fundamentals data at all (that data isn't real yet), so this is
    * cheaper than screen() and independently useful until round 2 exists.
+   *
+   * minCr/maxCr optionally override the ruleset's default market-cap
+   * bounds (990 Cr floor, no ceiling) for this call only — the shared
+   * ruleset instance is never mutated, so concurrent requests with
+   * different bounds don't interfere with each other.
    */
-  async screenRoundOne(): Promise<RoundOneResultDto[]> {
+  async screenRoundOne(minCr?: number, maxCr?: number): Promise<RoundOneResultDto[]> {
+    const ruleset =
+      minCr !== undefined || maxCr !== undefined
+        ? new ScreeningRuleset({
+            marketCapMin: new MarketCapMinRule(minCr ?? this.ruleset.marketCapMin.minCr, maxCr),
+          })
+        : this.ruleset;
+
     const allSymbols = await this.universe.getSymbols();
     // Market cap is one of the 6 rules and needs no price history — a
-    // symbol below the threshold fails the strict AND gate regardless of
+    // symbol outside the bounds fails the strict AND gate regardless of
     // what its bars look like, so there's no reason to fetch bars for it
-    // at all. Roughly half the universe clears this filter, halving the
-    // history query below for free.
-    const symbols = allSymbols.filter((entry) => entry.marketCapCr >= this.ruleset.marketCapMin.minCr);
+    // at all. Roughly half the universe clears the default floor, halving
+    // the history query below for free.
+    const symbols = allSymbols.filter(
+      (entry) =>
+        entry.marketCapCr >= ruleset.marketCapMin.minCr &&
+        (ruleset.marketCapMin.maxCr === undefined || entry.marketCapCr <= ruleset.marketCapMin.maxCr),
+    );
 
     const { fromDate, toDate } = this.historyRange();
     // One query for the whole (pre-filtered) universe, not one per symbol
@@ -64,7 +81,7 @@ export class ScreeningService {
 
     const results = symbols.map((entry) => {
       const bars = barsBySymbol.get(entry.symbol) ?? [];
-      const technicalRules = evaluateTechnicalRules(bars, entry.marketCapCr, this.ruleset);
+      const technicalRules = evaluateTechnicalRules(bars, entry.marketCapCr, ruleset);
       const lastClose = bars.length > 0 ? bars[bars.length - 1].close : null;
       const week52High = fiftyTwoWeekHigh(bars);
       // A symbol that passed the "close >= 0.75x of 52-week high" rule
@@ -97,8 +114,8 @@ export class ScreeningService {
    * scripts/pull-fundamentals.ts first to (re)populate storage for the
    * current round-1 list.
    */
-  async screenRoundTwo(): Promise<RoundTwoResultDto[]> {
-    const roundOnePassers = await this.screenRoundOne();
+  async screenRoundTwo(minCr?: number, maxCr?: number): Promise<RoundTwoResultDto[]> {
+    const roundOnePassers = await this.screenRoundOne(minCr, maxCr);
 
     const results = await Promise.all(
       roundOnePassers.map(async (entry) => {

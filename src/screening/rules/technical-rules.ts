@@ -36,7 +36,7 @@ export function evaluateTechnicalRules(
     },
     {
       rule: marketCapMin.label,
-      passed: marketCapCr >= marketCapMin.minCr,
+      passed: marketCapCr >= marketCapMin.minCr && (marketCapMin.maxCr === undefined || marketCapCr <= marketCapMin.maxCr),
       detail: `marketCapCr=${marketCapCr}`,
     },
     {
