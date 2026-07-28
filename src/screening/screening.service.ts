@@ -9,6 +9,7 @@ import { FundamentalsPort } from '../fundamentals-data/interfaces/fundamentals-p
 import { StoredFundamentalsAdapter } from '../fundamentals-data/adapters/stored-fundamentals.adapter';
 import { UniversePort } from '../universe/interfaces/universe-port.interface';
 import { evaluateTechnicalRules } from './rules/technical-rules';
+import { fiftyTwoWeekHigh } from '../indicators/week52.util';
 import { evaluateFundamentalRules } from './rules/fundamental-rules';
 import { evaluateChartPatternRules } from './rules/chart-pattern-rules';
 import { ScreeningRuleset } from './rules/screening-ruleset';
@@ -64,17 +65,26 @@ export class ScreeningService {
     const results = symbols.map((entry) => {
       const bars = barsBySymbol.get(entry.symbol) ?? [];
       const technicalRules = evaluateTechnicalRules(bars, entry.marketCapCr, this.ruleset);
+      const lastClose = bars.length > 0 ? bars[bars.length - 1].close : null;
+      const week52High = fiftyTwoWeekHigh(bars);
+      // A symbol that passed the "close >= 0.75x of 52-week high" rule
+      // always has both values, so this is only ever 0 for a symbol that's
+      // about to be filtered out below anyway.
+      const percentOf52WeekHigh = lastClose !== null && week52High !== null && week52High > 0 ? lastClose / week52High : 0;
       return {
         symbol: entry.symbol,
         companyName: entry.companyName,
         marketCapCr: entry.marketCapCr,
+        percentOf52WeekHigh,
         technicalRules,
       };
     });
 
+    // Strongest first — closest to its 52-week high, down to the 0.75x
+    // cutoff that "close >= 0.75x of 52-week high" already enforces above.
     return results
       .filter((r) => r.technicalRules.every((rule) => rule.passed))
-      .sort((a, b) => b.marketCapCr - a.marketCapCr);
+      .sort((a, b) => b.percentOf52WeekHigh - a.percentOf52WeekHigh);
   }
 
   /**

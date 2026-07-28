@@ -17,6 +17,12 @@ export class RoundTwoResultDto {
   @ApiProperty({ example: 279045 })
   marketCapCr: number;
 
+  @ApiProperty({
+    example: 0.94,
+    description: 'Last close as a fraction of the 52-week high (1.0 = at the high).',
+  })
+  percentOf52WeekHigh: number;
+
   @ApiProperty({ type: () => RuleResult, isArray: true })
   technicalRules: RuleResult[];
 
