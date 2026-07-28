@@ -17,6 +17,10 @@ import { MarketCapSnapshotEntity } from '../entities/market-cap-snapshot.entity'
  * we don't have the data, not a guess — which means it correctly fails the
  * market-cap rule rather than silently passing.
  */
+// A symbol still trading will always have a row within this window — no
+// need to scan years of history just to find each symbol's latest name.
+const RECENT_ACTIVITY_WINDOW_DAYS = 45;
+
 @Injectable()
 export class NseSymbolListAdapter implements UniversePort {
   constructor(
@@ -27,12 +31,20 @@ export class NseSymbolListAdapter implements UniversePort {
   ) {}
 
   async getSymbols(): Promise<UniverseEntry[]> {
+    const recentCutoff = new Date(Date.now() - RECENT_ACTIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
     const [symbolRows, marketCapRows] = await Promise.all([
       this.bhavcopyRepo
         .createQueryBuilder('bar')
         .distinctOn(['bar.tickerSymbol'])
         .select('bar.tickerSymbol', 'tickerSymbol')
         .addSelect('bar.instrumentName', 'instrumentName')
+        // DISTINCT ON needs to sort every matching row per symbol to find
+        // the latest one — without this, that's a sort over the entire
+        // history table (1M+ rows) just to read off ~3000 company names.
+        .where('bar.tradeDate >= :recentCutoff', { recentCutoff })
         .orderBy('bar.tickerSymbol', 'ASC')
         .addOrderBy('bar.tradeDate', 'DESC')
         .getRawMany<{ tickerSymbol: string; instrumentName: string | null }>(),

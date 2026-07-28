@@ -34,10 +34,14 @@ export class NseBhavcopyAdapter implements MarketDataPort {
     fromDate: string,
     toDate: string,
   ): Promise<Map<string, DailyBar[]>> {
-    // Raw select of just the 6 fields screening actually uses, not full
-    // entity hydration of all ~30 columns — this result set can be
-    // hundreds of thousands of rows (full universe x lookback window), so
-    // the unused columns and ORM object overhead are real cost here.
+    const wanted = new Set(symbols);
+    // Deliberately NOT filtering by symbol in SQL: an IN (...) clause with
+    // ~1500 bind parameters gets fully re-parsed on every call (Supabase's
+    // transaction pooler doesn't cache prepared statements across
+    // requests) and can push the planner off the simple trade_date index
+    // scan. A plain date-range scan is one predicate, one index, and we
+    // just discard rows for symbols we don't want in JS — measured ~15x
+    // faster against the pooler than the IN-clause version.
     const rows = await this.repo
       .createQueryBuilder('bar')
       .select('bar.tickerSymbol', 'symbol')
@@ -47,8 +51,7 @@ export class NseBhavcopyAdapter implements MarketDataPort {
       .addSelect('bar.lowPrice', 'low')
       .addSelect('bar.closePrice', 'close')
       .addSelect('bar.totalTradingVolume', 'volume')
-      .where('bar.tickerSymbol IN (:...symbols)', { symbols })
-      .andWhere('bar.tradeDate BETWEEN :fromDate AND :toDate', { fromDate, toDate })
+      .where('bar.tradeDate BETWEEN :fromDate AND :toDate', { fromDate, toDate })
       .orderBy('bar.tickerSymbol', 'ASC')
       .addOrderBy('bar.tradeDate', 'ASC')
       .getRawMany<{
@@ -63,6 +66,7 @@ export class NseBhavcopyAdapter implements MarketDataPort {
 
     const bySymbol = new Map<string, DailyBar[]>();
     for (const row of rows) {
+      if (!wanted.has(row.symbol)) continue;
       const bar: DailyBar = {
         symbol: row.symbol,
         date: row.date,
