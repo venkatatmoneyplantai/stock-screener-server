@@ -116,11 +116,12 @@ just the server-side half of each.
 | # | Item | Notes |
 | --- | --- | --- |
 | [x] 2 | Rank Round 1 by strength (closest to 52-week high first) | Done — `percentOf52WeekHigh` added to `RoundOneResultDto`/`RoundTwoResultDto`, `screenRoundOne()` now sorts by it descending instead of market cap |
-| 3 | EPS for the last 4 years AND last 8 quarters, for every Round 2 stock | Quarterly (8Q): already have it — confirmed 13 quarters stored per stock in `quarter_results` (e.g. ADANIENT: Mar 2023–Mar 2026). Annual (4Y): not pulled yet, but `IndianApiAdapter.getYoyResults()` is already implemented and unused, and `yoy_results` already exists as a table (confirmed 0 rows) — this is wiring up an existing method + a new pull step, not a new integration |
-| 6 | Sector name per stock (NSE publishes this) | New data source needed — Bhavcopy doesn't carry sector. Need to find where NSE publishes it, pull and store it, then expose on both round endpoints |
-| 7 | Configurable min/max market cap instead of the fixed ₹990 Cr floor | Round 1/2 endpoints need to accept market-cap bounds as query params, falling back to the ruleset's current default (990) if not given. Keeps the ruleset's own default intact for anyone not passing custom bounds |
+| 3 | EPS for the last 4 years AND last 8 quarters, for every Round 2 stock | Quarterly (8Q): already have it — confirmed 13 quarters stored per stock in `quarter_results` (e.g. ADANIENT: Mar 2023–Mar 2026). Annual (4Y): not pulled yet, but `IndianApiAdapter.getYoyResults()` is already implemented and unused, and `yoy_results` already exists as a table (confirmed 0 rows) — this is wiring up an existing method + a new pull step, not a new integration. Whatever gets pulled also needs pushing to Supabase (production), not just local — same as how `quarter_results` got there in the original migration; running the new pull script once pointed at `DATABASE_URL=<Supabase>` would do it directly |
+| [skip] 6 | Sector name per stock (NSE publishes this) | Skipped for now, by request. Confirmed no existing source has it — not Bhavcopy, not any of the 7 indianapi.in stat types. Would need research into a free source covering the full ~3,000-symbol universe before starting |
+| [x] 7 | Configurable min/max market cap instead of the fixed ₹990 Cr floor | Done — `GET /screening/round-one` and `/round-two` accept `minCr`/`maxCr` query params (validated via `MarketCapFilterDto`), falling back to the ruleset default (990, no ceiling) if omitted. Per-request only, shared ruleset never mutated |
 
-Not yet broken into an implementation order — this is the raw list as given.
+2 and 7 are done. 6 is explicitly skipped for now. 3 remains — see the note
+on it above about what it actually needs.
 
 ## Already done
 
