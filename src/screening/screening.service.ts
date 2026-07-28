@@ -42,12 +42,19 @@ export class ScreeningService {
    * cheaper than screen() and independently useful until round 2 exists.
    */
   async screenRoundOne(): Promise<RoundOneResultDto[]> {
-    const symbols = await this.universe.getSymbols();
+    const allSymbols = await this.universe.getSymbols();
+    // Market cap is one of the 6 rules and needs no price history — a
+    // symbol below the threshold fails the strict AND gate regardless of
+    // what its bars look like, so there's no reason to fetch bars for it
+    // at all. Roughly half the universe clears this filter, halving the
+    // history query below for free.
+    const symbols = allSymbols.filter((entry) => entry.marketCapCr >= this.ruleset.marketCapMin.minCr);
+
     const { fromDate, toDate } = this.historyRange();
-    // One query for the whole universe, not one per symbol — 3000+
-    // individual round trips is what was timing this out against a
-    // remote DB (fine against near-zero-latency local Postgres, not fine
-    // against a real network hop to Supabase).
+    // One query for the whole (pre-filtered) universe, not one per symbol
+    // — 3000+ individual round trips is what was timing this out against
+    // a remote DB (fine against near-zero-latency local Postgres, not
+    // fine against a real network hop to Supabase).
     const barsBySymbol = await this.marketData.getDailyHistoryForSymbols(
       symbols.map((entry) => entry.symbol),
       fromDate,
