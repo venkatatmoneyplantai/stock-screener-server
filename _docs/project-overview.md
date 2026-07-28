@@ -11,6 +11,12 @@ ranked results over an HTTP API for a dashboard to consume. It does not
 place trades, provide investment advice, or hold user accounts — it's a
 data-processing and ranking service.
 
+The dashboard that consumes this API is a separate project,
+`stock-screener-client` (own repo, own `_docs/`) — deliberately independent
+so each half can be redeployed without touching the other. See
+`_docs/current-status.md` § Deployment for how the two are wired together in
+production.
+
 The screening rules themselves (what counts as a pass, thresholds,
 configurable multiples) are defined outside this codebase and implemented
 here as pure functions — see `src/screening/rules/`.
@@ -92,6 +98,16 @@ npm run start:dev              # boots the API with hot reload
 - Swagger UI: `http://localhost:<PORT>/api-docs` (when `SWAGGER_ENABLED=true`)
 
 To type-check without building: `npx tsc --noEmit`.
+
+## Deployment
+
+Live on Vercel (`https://stock-screener-server.vercel.app`), reading from a
+Supabase Postgres database. Locally, this same code runs against the Docker
+Postgres above — the DB config (`src/database/typeorm.config.ts`) picks up
+a `DATABASE_URL` env var when set (production) and otherwise falls back to
+the discrete `DB_HOST`/`DB_PORT`/etc vars (local). Full deployment details,
+the bugs that came up getting there, and the performance fixes the Supabase
+migration required: `_docs/current-status.md` § Deployment.
 
 ## Coding conventions
 

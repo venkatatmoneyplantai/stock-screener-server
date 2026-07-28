@@ -17,7 +17,9 @@ Status markers: `[]` not started, `[A]` active/in progress, `[x]` done.
 [x] Only keep the stocks that actually pass, not just score everyone
 [] Save the results somewhere
 [] Make the whole thing run on its own (daily, or on demand)
-[] Build a screen to see the results
+[x] Build a screen to see the results
+[x] Deploy server + database for real (Vercel + Supabase)
+[] Ship the requested shortlist/analysis enhancements below
 
 ## Phases
 
@@ -82,13 +84,44 @@ each time — but not a blocker for anything else right now.
 | Run it automatically on a schedule | e.g. once a day |
 | Allow running it on demand | e.g. a button on the dashboard |
 
-### Phase 6 — Show the results
+### Phase 6 — Show the results — done
 
-A simple screen to see the stocks that passed.
+A simple screen to see the stocks that passed. Built as a fully separate
+project, `stock-screener-client` — see that repo's own `_docs/`.
 
 | Item | Notes |
 | --- | --- |
-| Build the dashboard | Separate app, not started yet |
+| [x] Build the dashboard | Separate Vite/React app, three tabs (Round 2, Round 1, Stock Lookup), verified against real data |
+
+### Phase 7 — Deploy for real — done
+
+Split across three platforms on purpose: server on Vercel, database on
+Supabase, client on Cloudflare Pages — each independently redeployable.
+
+| Item | Notes |
+| --- | --- |
+| [x] Migrate database to Supabase | Schema + data (2024–present, ~1.25M bhavcopy rows; dropped 2021–2023 to fit the free tier's 500 MB cap) |
+| [x] Deploy server to Vercel | `https://stock-screener-server.vercel.app` — serverless, see `_docs/DECISIONS.md` for the adapter approach |
+| [x] Fix three real deployment bugs | tsconfig rootDir regression, Vercel auto-detecting a phantom function, `serverless-http` being built for AWS Lambda instead of Vercel's actual request signature — see `_docs/DECISIONS.md` |
+| [x] Fix a real performance bug the migration exposed | `screenRoundOne()` was firing one DB query per symbol (~3,122 concurrent) — fine against local Postgres, but timed out completely against a real network hop to Supabase. Replaced with one bulk query + a market-cap pre-filter + fixed an unbounded full-table scan in `getSymbols()`. Round 1 now runs in ~6–11s cold, ~6s warm, against production data |
+| [x] Fix a local-dev regression introduced by the Supabase changes | DB config was reading env vars before `.env` had loaded — `npm run start:dev` was silently trying to connect to the wrong port. Fixed, verified working again |
+| [] Deploy client to Cloudflare Pages | In progress — see `stock-screener-client/_docs/TODO.md` |
+| [] Tighten `ALLOWED_CORS_ORIGIN` from `*` to the real Cloudflare domain | Once the client has a live URL |
+
+### Phase 8 — Requested enhancements (from user feedback)
+
+One round of feedback after seeing the first working dashboard. Full list
+with client-side notes is in `stock-screener-client/_docs/TODO.md` — this is
+just the server-side half of each.
+
+| # | Item | Notes |
+| --- | --- | --- |
+| 2 | Rank Round 1 by strength (closest to 52-week high first) | Currently sorted by market cap. Need to expose a real numeric "% of 52-week high" field per stock (not just buried in a text `detail` string) so it can be sorted on properly |
+| 3 | EPS for the last 4 years AND last 8 quarters, for every Round 2 stock | Quarterly EPS already exists (~13 quarters stored per stock via `quarter_results`). Annual EPS (4 years) is new — the `yoy_results` table already exists but isn't populated or used by anything yet; this would finally give it a purpose |
+| 6 | Sector name per stock (NSE publishes this) | New data source needed — Bhavcopy doesn't carry sector. Need to find where NSE publishes it, pull and store it, then expose on both round endpoints |
+| 7 | Configurable min/max market cap instead of the fixed ₹990 Cr floor | Round 1/2 endpoints need to accept market-cap bounds as query params, falling back to the ruleset's current default (990) if not given. Keeps the ruleset's own default intact for anyone not passing custom bounds |
+
+Not yet broken into an implementation order — this is the raw list as given.
 
 ## Already done
 
@@ -105,3 +138,5 @@ A simple screen to see the stocks that passed.
 | Database is connected and actually storing real data |
 | Health check |
 | API documentation |
+| Dashboard client built and verified against real data (`stock-screener-client`) |
+| Server deployed to Vercel, database migrated to Supabase — both live |
