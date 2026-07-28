@@ -115,7 +115,7 @@ just the server-side half of each.
 
 | # | Item | Notes |
 | --- | --- | --- |
-| 2 | Rank Round 1 by strength (closest to 52-week high first) | Currently sorted by market cap. The underlying data already exists (close + 52-week high are computed for every stock during Round 1 evaluation) — just needs exposing as a real numeric field instead of being buried in a text `detail` string, then used as the sort key |
+| [x] 2 | Rank Round 1 by strength (closest to 52-week high first) | Done — `percentOf52WeekHigh` added to `RoundOneResultDto`/`RoundTwoResultDto`, `screenRoundOne()` now sorts by it descending instead of market cap |
 | 3 | EPS for the last 4 years AND last 8 quarters, for every Round 2 stock | Quarterly (8Q): already have it — confirmed 13 quarters stored per stock in `quarter_results` (e.g. ADANIENT: Mar 2023–Mar 2026). Annual (4Y): not pulled yet, but `IndianApiAdapter.getYoyResults()` is already implemented and unused, and `yoy_results` already exists as a table (confirmed 0 rows) — this is wiring up an existing method + a new pull step, not a new integration |
 | 6 | Sector name per stock (NSE publishes this) | New data source needed — Bhavcopy doesn't carry sector. Need to find where NSE publishes it, pull and store it, then expose on both round endpoints |
 | 7 | Configurable min/max market cap instead of the fixed ₹990 Cr floor | Round 1/2 endpoints need to accept market-cap bounds as query params, falling back to the ruleset's current default (990) if not given. Keeps the ruleset's own default intact for anyone not passing custom bounds |
