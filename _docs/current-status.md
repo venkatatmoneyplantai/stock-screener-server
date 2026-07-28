@@ -23,7 +23,7 @@ work see `_docs/TODO.md`; for why things are the way they are, see
 | Dashboard client (`stock-screener-client`) | Done, verified against real data — see that repo's own `_docs/` |
 | Deployment — server (Vercel) | Done — live at `https://stock-screener-server.vercel.app` |
 | Deployment — database (Supabase) | Done — migrated, ~1.25M rows (2024–present) |
-| Deployment — client (Cloudflare Pages) | In progress |
+| Deployment — client (Cloudflare Pages) | Done — live at `https://stock-screener-client.pages.dev` |
 | Persistence of screening results | Not started, not urgent |
 | Scheduling / run-on-demand | Not started, not urgent |
 
@@ -60,8 +60,8 @@ Split across three platforms on purpose — see the client's
   `synchronize` is always off when `DATABASE_URL` is set or `NODE_ENV=production`;
   schema changes there need a manual migration (see `scripts/data-source.ts`
   or a direct `psql`/SQL command).
-- **Client** — Cloudflare Pages (in progress), pointed at the Vercel URL via
-  `VITE_API_BASE`.
+- **Client** — Cloudflare Pages, live at `https://stock-screener-client.pages.dev`,
+  pointed at the Vercel URL via `VITE_API_BASE`.
 
 Three real bugs surfaced getting this working, all fixed:
 
@@ -155,8 +155,6 @@ convention.
 
 ## What remains
 
-- Finish deploying the client to Cloudflare Pages, then tighten
-  `ALLOWED_CORS_ORIGIN` from `*` to the real Cloudflare domain.
 - Fill the Dec 2–19, 2025 price data gap in local Postgres (not urgent —
   production/Supabase only has 2024+ anyway).
 - Decide whether to persist screening results themselves, and whether to

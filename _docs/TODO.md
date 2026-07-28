@@ -105,8 +105,7 @@ Supabase, client on Cloudflare Pages — each independently redeployable.
 | [x] Fix three real deployment bugs | tsconfig rootDir regression, Vercel auto-detecting a phantom function, `serverless-http` being built for AWS Lambda instead of Vercel's actual request signature — see `_docs/DECISIONS.md` |
 | [x] Fix a real performance bug the migration exposed | `screenRoundOne()` was firing one DB query per symbol (~3,122 concurrent) — fine against local Postgres, but timed out completely against a real network hop to Supabase. Replaced with one bulk query + a market-cap pre-filter + fixed an unbounded full-table scan in `getSymbols()`. Round 1 now runs in ~6–11s cold, ~6s warm, against production data |
 | [x] Fix a local-dev regression introduced by the Supabase changes | DB config was reading env vars before `.env` had loaded — `npm run start:dev` was silently trying to connect to the wrong port. Fixed, verified working again |
-| [] Deploy client to Cloudflare Pages | In progress — see `stock-screener-client/_docs/TODO.md` |
-| [] Tighten `ALLOWED_CORS_ORIGIN` from `*` to the real Cloudflare domain | Once the client has a live URL |
+| [x] Deploy client to Cloudflare Pages | Live at `https://stock-screener-client.pages.dev`, confirmed loading real data |
 
 ### Phase 8 — Requested enhancements (from user feedback)
 
@@ -116,8 +115,8 @@ just the server-side half of each.
 
 | # | Item | Notes |
 | --- | --- | --- |
-| 2 | Rank Round 1 by strength (closest to 52-week high first) | Currently sorted by market cap. Need to expose a real numeric "% of 52-week high" field per stock (not just buried in a text `detail` string) so it can be sorted on properly |
-| 3 | EPS for the last 4 years AND last 8 quarters, for every Round 2 stock | Quarterly EPS already exists (~13 quarters stored per stock via `quarter_results`). Annual EPS (4 years) is new — the `yoy_results` table already exists but isn't populated or used by anything yet; this would finally give it a purpose |
+| 2 | Rank Round 1 by strength (closest to 52-week high first) | Currently sorted by market cap. The underlying data already exists (close + 52-week high are computed for every stock during Round 1 evaluation) — just needs exposing as a real numeric field instead of being buried in a text `detail` string, then used as the sort key |
+| 3 | EPS for the last 4 years AND last 8 quarters, for every Round 2 stock | Quarterly (8Q): already have it — confirmed 13 quarters stored per stock in `quarter_results` (e.g. ADANIENT: Mar 2023–Mar 2026). Annual (4Y): not pulled yet, but `IndianApiAdapter.getYoyResults()` is already implemented and unused, and `yoy_results` already exists as a table (confirmed 0 rows) — this is wiring up an existing method + a new pull step, not a new integration |
 | 6 | Sector name per stock (NSE publishes this) | New data source needed — Bhavcopy doesn't carry sector. Need to find where NSE publishes it, pull and store it, then expose on both round endpoints |
 | 7 | Configurable min/max market cap instead of the fixed ₹990 Cr floor | Round 1/2 endpoints need to accept market-cap bounds as query params, falling back to the ruleset's current default (990) if not given. Keeps the ruleset's own default intact for anyone not passing custom bounds |
 
