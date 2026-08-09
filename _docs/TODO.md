@@ -136,7 +136,8 @@ feedback, not started.
 | The 6 price/chart rules run on real data, verified |
 | Company size (market cap) is now real too — runnable on its own (`npm run pull:market-cap`) |
 | Company results (EPS, profit, etc.) — real data pulled and stored for all 125 round-1 stocks (`npm run pull:fundamentals`), and the rules now read it from storage |
-| Round 1 and round 2 both work end to end on real data — 125 pass round 1, 38 clear round 2's 2-of-3 fundamentals gate |
+| Round 1 and round 2 both work end to end on real data — see current-status.md for today's live counts |
+| Round 2 redesigned into two independent EPS/Operating Profit "buckets" (2-of-3 each, either passes) instead of one flat 3-rule gate |
 | Database is connected and actually storing real data |
 | Health check |
 | API documentation |
