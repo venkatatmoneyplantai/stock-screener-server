@@ -13,9 +13,11 @@ code for it (`chart-pattern-rules.ts`, `indicators/vcp-detector.util.ts`)
 still exists but is not called by `screening.service.ts`.
 
 **Round 1 (technical) is a strict pass/fail gate** — a symbol only counts as
-a pass if it meets every rule below. **Round 2 (fundamental) is not** — a
-symbol passes if it meets at least 2 of its 3 rules. See `_docs/DECISIONS.md`
-and `_docs/architecture/rounds.md` for the full round breakdown.
+a pass if it meets every rule below. **Round 2 (fundamental) is not** — its
+6 rules split into two independent 3-rule "buckets" (EPS, Operating
+Profit), and a symbol passes if either bucket clears its own 2-of-3. See
+`_docs/DECISIONS.md` and `_docs/architecture/rounds.md` for the full round
+breakdown, including what happens when a bucket rule can't be evaluated.
 
 ## 1. Technical Rules (Round 1 — all 6 must pass)
 
@@ -26,7 +28,13 @@ and `_docs/architecture/rounds.md` for the full round breakdown.
 5. **Liquidity (turnover)** — Close * 20DMA Volume >= 200,000,000 (20 crore)
 6. **200DMA trending up** — 200DMA today > 200DMA from 8 weeks ago
 
-## 2. Fundamental Rules (Round 2 — at least 2 of 3 must pass)
+## 2. Fundamental Rules (Round 2 — either bucket needs 2 of its 3 to pass)
+
+Two buckets, identical 3-rule shape, different metric. A symbol passes
+round 2 if **Bucket A OR Bucket B** clears its own 2-of-3 — the buckets
+are independent, not summed together.
+
+### Bucket A — EPS
 
 1. **YoY EPS Growth** — EPS should have increased by at least 25% year-over-year.
    - Configurable threshold (default: 25%)
@@ -35,9 +43,29 @@ and `_docs/architecture/rounds.md` for the full round breakdown.
    - Example: last FY's overall EPS growth was 20%. This FY, Q1 grew 12% YoY and Q2 grew 7% YoY — running total 19%, already close to/on pace to clear last year's 20%.
    - Needs at least one full prior fiscal year plus the fiscal year before that (to compute last year's own growth %), plus however many quarters are complete in the current FY.
 
-**Removed:** an "Other income distortion check" (would-be rule 4) used to
-fall back to Operating Profit growth when Other Income swung ≥3x between
-compared periods. Removed from round 2 entirely — see `_docs/DECISIONS.md`.
+### Bucket B — Operating Profit
+
+Exact same 3-rule shape as Bucket A, applied to Operating Profit instead
+of EPS. Operating Profit is already present in the same `quarter_results`
+data EPS comes from, so no new data pull is needed for this bucket.
+
+1. **YoY Operating Profit Growth** — ≥ 25% (configurable, same default as the EPS bucket).
+2. **Quarterly Operating Profit YoY comparison** — same shape as the EPS version, against Operating Profit.
+3. **Cumulative growth pace vs. last fiscal year** — same shape as the EPS version, against Operating Profit.
+
+### Missing data
+
+If a bucket rule can't be evaluated (insufficient quarterly/fiscal-year
+history), it's **excluded from that bucket's own count** rather than
+counted as a failure — the bucket's threshold generalizes "2 of 3" to
+`ceil(available * 2/3)` of whatever rules actually had enough data. A
+bucket with zero available rules never passes.
+
+**Removed:** an "Other income distortion check" (a prior would-be rule 4)
+used to fall back to Operating Profit growth when Other Income swung ≥3x
+between compared periods. Removed from round 2 entirely — superseded by
+Bucket B being a first-class, always-evaluated Operating Profit check
+rather than a conditional fallback. See `_docs/DECISIONS.md`.
 
 ## 3. Chart Patterns — deferred, not part of V1
 

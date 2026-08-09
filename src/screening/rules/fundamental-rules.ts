@@ -22,15 +22,30 @@ function parsePeriod(quarter: QuarterlyFinancials): ParsedQuarter | null {
   return { quarter, quarterNumber: Number(match[1]), fiscalYear: Number(match[2]) };
 }
 
+interface RuleOutcome {
+  result: RuleResult;
+  /** Whether there was enough data to actually evaluate this rule — see
+   * evaluateGrowthBucket for how this affects the bucket's own pass gate. */
+  available: boolean;
+}
+
 /**
- * Sum this fiscal year's completed quarters' YoY growth % and compare
- * against last full fiscal year's overall EPS growth %. See
- * _docs/architecture/screening-rules.md § 2.4.
+ * Sum this fiscal year's completed quarters' YoY growth % (of whatever
+ * `metric` selects — EPS or Operating Profit) and compare against last full
+ * fiscal year's overall growth %. See _docs/architecture/screening-rules.md
+ * § 2.4.
  */
-function evaluateCumulativeGrowthPace(quarters: QuarterlyFinancials[], label: string): RuleResult {
+function evaluateCumulativeGrowthPace(
+  quarters: QuarterlyFinancials[],
+  metric: (q: QuarterlyFinancials) => number,
+  label: string,
+): RuleOutcome {
   const parsed = quarters.map(parsePeriod);
   if (parsed.some((p) => p === null) || parsed.length === 0) {
-    return { rule: label, passed: false, detail: 'could not parse fiscal period labels (expected "Qn FYyy")' };
+    return {
+      result: { rule: label, passed: false, detail: 'could not parse fiscal period labels (expected "Qn FYyy")' },
+      available: false,
+    };
   }
   const all = parsed as ParsedQuarter[];
 
@@ -40,42 +55,123 @@ function evaluateCumulativeGrowthPace(quarters: QuarterlyFinancials[], label: st
   const priorFyQuarters = all.filter((p) => p.fiscalYear === currentFy - 2);
 
   if (thisFyQuarters.length === 0) {
-    return { rule: label, passed: false, detail: 'no completed quarters yet in the current fiscal year' };
+    return {
+      result: { rule: label, passed: false, detail: 'no completed quarters yet in the current fiscal year' },
+      available: false,
+    };
   }
   if (lastFyQuarters.length < QUARTERS_PER_YEAR || priorFyQuarters.length < QUARTERS_PER_YEAR) {
-    return { rule: label, passed: false, detail: 'insufficient history to compute last fiscal year growth' };
+    return {
+      result: { rule: label, passed: false, detail: 'insufficient history to compute last fiscal year growth' },
+      available: false,
+    };
   }
 
   let cumulativeGrowthPct = 0;
   for (const q of thisFyQuarters) {
     const sameQuarterLastFy = lastFyQuarters.find((p) => p.quarterNumber === q.quarterNumber);
-    const growth = sameQuarterLastFy
-      ? percentGrowth(q.quarter.basicEps, sameQuarterLastFy.quarter.basicEps)
-      : null;
+    const growth = sameQuarterLastFy ? percentGrowth(metric(q.quarter), metric(sameQuarterLastFy.quarter)) : null;
     if (growth === null) {
       return {
-        rule: label,
-        passed: false,
-        detail: `could not compute growth for ${q.quarter.periodLabel} vs. the same quarter last FY`,
+        result: {
+          rule: label,
+          passed: false,
+          detail: `could not compute growth for ${q.quarter.periodLabel} vs. the same quarter last FY`,
+        },
+        available: false,
       };
     }
     cumulativeGrowthPct += growth;
   }
 
-  const lastFyEps = lastFyQuarters.reduce((sum, p) => sum + p.quarter.basicEps, 0);
-  const priorFyEps = priorFyQuarters.reduce((sum, p) => sum + p.quarter.basicEps, 0);
-  const lastFyGrowthPct = percentGrowth(lastFyEps, priorFyEps);
+  const lastFyValue = lastFyQuarters.reduce((sum, p) => sum + metric(p.quarter), 0);
+  const priorFyValue = priorFyQuarters.reduce((sum, p) => sum + metric(p.quarter), 0);
+  const lastFyGrowthPct = percentGrowth(lastFyValue, priorFyValue);
 
   if (lastFyGrowthPct === null) {
-    return { rule: label, passed: false, detail: 'could not compute last fiscal year growth' };
+    return { result: { rule: label, passed: false, detail: 'could not compute last fiscal year growth' }, available: false };
   }
 
   const thisFyLabels = thisFyQuarters.map((p) => p.quarter.periodLabel).join(', ');
   return {
-    rule: label,
-    passed: cumulativeGrowthPct >= lastFyGrowthPct,
-    detail: `this FY so far (${thisFyLabels}) cumulative growth=${cumulativeGrowthPct.toFixed(1)}%, last full FY growth=${lastFyGrowthPct.toFixed(1)}%`,
+    result: {
+      rule: label,
+      passed: cumulativeGrowthPct >= lastFyGrowthPct,
+      detail: `this FY so far (${thisFyLabels}) cumulative growth=${cumulativeGrowthPct.toFixed(1)}%, last full FY growth=${lastFyGrowthPct.toFixed(1)}%`,
+    },
+    available: true,
   };
+}
+
+interface GrowthBucketRules {
+  growthRule: { label: string; minGrowthPct: number };
+  quarterlyRule: { label: string };
+  cumulativeRule: { label: string };
+}
+
+interface BucketEvaluation {
+  results: RuleResult[];
+  passed: boolean;
+}
+
+/**
+ * One "bucket" of 3 rules (YoY growth, quarterly YoY comparison, cumulative
+ * growth pace) evaluated against whatever `metric` selects off each
+ * quarter — EPS for one bucket, Operating Profit for the other. A rule that
+ * can't be evaluated (insufficient data) is excluded from the bucket's own
+ * pass gate rather than counted as a failure — "rely on whatever data we
+ * have" per the Round 2 redesign. The gate generalizes "2 of 3": pass if at
+ * least ceil(available * 2/3) of the AVAILABLE rules passed, and a bucket
+ * with zero available rules never passes (no evidence either way).
+ */
+function evaluateGrowthBucket(
+  quarters: QuarterlyFinancials[],
+  metric: (q: QuarterlyFinancials) => number,
+  bucket: GrowthBucketRules,
+): BucketEvaluation {
+  const current = quarters[0];
+  const yearAgo = quarters[QUARTERS_PER_YEAR];
+
+  const outcomes: RuleOutcome[] = [];
+
+  if (!current || !yearAgo) {
+    outcomes.push({
+      result: { rule: bucket.growthRule.label, passed: false, detail: 'insufficient quarterly history' },
+      available: false,
+    });
+    outcomes.push({
+      result: { rule: bucket.quarterlyRule.label, passed: false, detail: 'insufficient quarterly history' },
+      available: false,
+    });
+  } else {
+    const growthPct = percentGrowth(metric(current), metric(yearAgo));
+    const available = growthPct !== null;
+    outcomes.push({
+      result: {
+        rule: bucket.growthRule.label,
+        passed: available && growthPct! >= bucket.growthRule.minGrowthPct,
+        detail: `current=${current.periodLabel} value=${metric(current)}, yearAgo=${yearAgo.periodLabel} value=${metric(yearAgo)}, growth=${growthPct?.toFixed(1)}%`,
+      },
+      available,
+    });
+    outcomes.push({
+      result: {
+        rule: bucket.quarterlyRule.label,
+        passed: available && growthPct! > 0,
+        detail: `${current.periodLabel} value=${metric(current)} vs ${yearAgo.periodLabel} value=${metric(yearAgo)}`,
+      },
+      available,
+    });
+  }
+
+  outcomes.push(evaluateCumulativeGrowthPace(quarters, metric, bucket.cumulativeRule.label));
+
+  const availableCount = outcomes.filter((o) => o.available).length;
+  const passedCount = outcomes.filter((o) => o.available && o.result.passed).length;
+  const required = Math.ceil((availableCount * 2) / 3);
+  const passed = availableCount > 0 && passedCount >= required;
+
+  return { results: outcomes.map((o) => o.result), passed };
 }
 
 /**
@@ -84,38 +180,33 @@ function evaluateCumulativeGrowthPace(quarters: QuarterlyFinancials[], label: st
  *
  * "YoY" for quarter-vs-quarter rules means the same quarter one year prior
  * (quarters[0] vs quarters[4]) — see _docs/DECISIONS.md.
+ *
+ * Round 2 evaluates two independent "buckets" of 3 rules each — one for
+ * EPS, one for Operating Profit — and passes a symbol if EITHER bucket
+ * clears its own 2-of-3 gate (see evaluateGrowthBucket). The 6 individual
+ * results are returned as one flat list; `passed` is the bucket-OR outcome
+ * a caller should actually filter on.
  */
 export function evaluateFundamentalRules(
   quarters: QuarterlyFinancials[],
   ruleset = new ScreeningRuleset(),
-): RuleResult[] {
-  const { epsYoyGrowth, quarterlyEpsYoy, cumulativeGrowthPace } = ruleset;
-  const results: RuleResult[] = [];
-  const current = quarters[0];
-  const yearAgo = quarters[QUARTERS_PER_YEAR];
+): { results: RuleResult[]; passed: boolean } {
+  const { epsYoyGrowth, quarterlyEpsYoy, cumulativeGrowthPace, opYoyGrowth, quarterlyOpYoy, cumulativeOpGrowthPace } = ruleset;
 
-  if (!current || !yearAgo) {
-    return [
-      { rule: epsYoyGrowth.label, passed: false, detail: 'insufficient quarterly history' },
-      { rule: quarterlyEpsYoy.label, passed: false, detail: 'insufficient quarterly history' },
-      { rule: cumulativeGrowthPace.label, passed: false, detail: 'insufficient quarterly history' },
-    ];
-  }
-
-  const epsGrowthPct = percentGrowth(current.basicEps, yearAgo.basicEps);
-  results.push({
-    rule: epsYoyGrowth.label,
-    passed: epsGrowthPct !== null && epsGrowthPct >= epsYoyGrowth.minGrowthPct,
-    detail: `current=${current.periodLabel} eps=${current.basicEps}, yearAgo=${yearAgo.periodLabel} eps=${yearAgo.basicEps}, growth=${epsGrowthPct?.toFixed(1)}%`,
+  const epsBucket = evaluateGrowthBucket(quarters, (q) => q.basicEps, {
+    growthRule: epsYoyGrowth,
+    quarterlyRule: quarterlyEpsYoy,
+    cumulativeRule: cumulativeGrowthPace,
   });
 
-  results.push({
-    rule: quarterlyEpsYoy.label,
-    passed: epsGrowthPct !== null && epsGrowthPct > 0,
-    detail: `${current.periodLabel} eps=${current.basicEps} vs ${yearAgo.periodLabel} eps=${yearAgo.basicEps}`,
+  const opBucket = evaluateGrowthBucket(quarters, (q) => q.operatingProfit, {
+    growthRule: opYoyGrowth,
+    quarterlyRule: quarterlyOpYoy,
+    cumulativeRule: cumulativeOpGrowthPace,
   });
 
-  results.push(evaluateCumulativeGrowthPace(quarters, cumulativeGrowthPace.label));
-
-  return results;
+  return {
+    results: [...epsBucket.results, ...opBucket.results],
+    passed: epsBucket.passed || opBucket.passed,
+  };
 }

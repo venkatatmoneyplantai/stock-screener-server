@@ -19,7 +19,6 @@ import { RoundOneResultDto } from './dto/round-one-result.dto';
 import { RoundTwoResultDto } from './dto/round-two-result.dto';
 
 const HISTORY_LOOKBACK_DAYS = 400; // enough for 200DMA + 8-week-old 200DMA + 52wk hi/lo
-const MIN_FUNDAMENTAL_RULES_TO_PASS = 2; // out of 3 — round 2 is not a strict all-must-pass gate
 
 @Injectable()
 export class ScreeningService {
@@ -105,9 +104,11 @@ export class ScreeningService {
   }
 
   /**
-   * "Round 2" — round-1 passers whose STORED fundamentals clear at least
-   * MIN_FUNDAMENTAL_RULES_TO_PASS of the (3) fundamental rules — NOT a
-   * strict all-must-pass gate, unlike round 1. See _docs/DECISIONS.md and
+   * "Round 2" — round-1 passers whose STORED fundamentals clear round 2's
+   * fundamental gate — NOT a strict all-must-pass gate, unlike round 1. The
+   * fundamental rules are two "buckets" (EPS and Operating Profit), each
+   * needing 2-of-3 to pass on its own; a symbol clears round 2 if EITHER
+   * bucket passes. See evaluateFundamentalRules, _docs/DECISIONS.md, and
    * _docs/architecture/rounds.md for why. Always reads quarter_results via
    * StoredFundamentalsAdapter, never the live API — safe to call as often
    * as needed regardless of the indianapi.in rate limit. Run
@@ -124,15 +125,13 @@ export class ScreeningService {
           this.storedFundamentals.getQuarterlyEpsHistory(entry.symbol),
           this.storedFundamentals.getAnnualEpsHistory(entry.symbol),
         ]);
-        const fundamentalRules = evaluateFundamentalRules(quarters, this.ruleset);
+        const { results: fundamentalRules, passed: fundamentalsPassed } = evaluateFundamentalRules(quarters, this.ruleset);
         const epsHistory = { quarterly: quarterlyEps, annual: annualEps };
-        return { ...entry, fundamentalRules, epsHistory };
+        return { ...entry, fundamentalRules, fundamentalsPassed, epsHistory };
       }),
     );
 
-    return results
-      .filter((r) => r.fundamentalRules.filter((rule) => rule.passed).length >= MIN_FUNDAMENTAL_RULES_TO_PASS)
-      .sort((a, b) => b.marketCapCr - a.marketCapCr);
+    return results.filter((r) => r.fundamentalsPassed).sort((a, b) => b.marketCapCr - a.marketCapCr);
   }
 
   private historyRange(): { fromDate: string; toDate: string } {
@@ -159,7 +158,7 @@ export class ScreeningService {
     ]);
 
     const technicalRules = evaluateTechnicalRules(bars, marketCapCr, this.ruleset);
-    const fundamentalRules = evaluateFundamentalRules(quarters, this.ruleset);
+    const { results: fundamentalRules } = evaluateFundamentalRules(quarters, this.ruleset);
     const chartPatternRules = evaluateChartPatternRules(bars, this.ruleset);
 
     const allRules = [...technicalRules, ...fundamentalRules, ...chartPatternRules];

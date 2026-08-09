@@ -2,13 +2,16 @@ import {
   ChartPattern,
   ChartPatternRule,
   CumulativeGrowthPaceRule,
+  CumulativeOpGrowthPaceRule,
   EpsYoyGrowthRule,
   MarketCapMinRule,
   MovingAverageAboveRule,
   MovingAverageTrendRule,
+  OpYoyGrowthRule,
   PercentAboveLowRule,
   PercentOfHighRule,
   QuarterlyEpsYoyRule,
+  QuarterlyOpYoyRule,
   ScreeningRule,
   TurnoverMinRule,
 } from './rule-types';
@@ -22,6 +25,12 @@ import {
  * NOTE: OtherIncomeDistortionRule (still defined in rule-types.ts) was
  * removed from fundamentalRules — round 2 no longer evaluates it. See
  * _docs/DECISIONS.md and _docs/architecture/rounds.md.
+ *
+ * Round 2's fundamental rules are two "buckets" — EPS (epsYoyGrowth,
+ * quarterlyEpsYoy, cumulativeGrowthPace) and Operating Profit (opYoyGrowth,
+ * quarterlyOpYoy, cumulativeOpGrowthPace) — each independently needing
+ * 2-of-3 to pass; a symbol clears round 2 if EITHER bucket passes. See
+ * evaluateFundamentalRules in fundamental-rules.ts.
  */
 export class ScreeningRuleset {
   readonly movingAverageAbove: MovingAverageAboveRule;
@@ -33,6 +42,9 @@ export class ScreeningRuleset {
   readonly epsYoyGrowth: EpsYoyGrowthRule;
   readonly quarterlyEpsYoy: QuarterlyEpsYoyRule;
   readonly cumulativeGrowthPace: CumulativeGrowthPaceRule;
+  readonly opYoyGrowth: OpYoyGrowthRule;
+  readonly quarterlyOpYoy: QuarterlyOpYoyRule;
+  readonly cumulativeOpGrowthPace: CumulativeOpGrowthPaceRule;
   readonly chartPattern: ChartPatternRule;
 
   constructor(overrides: Partial<Omit<ScreeningRuleset, 'technicalRules' | 'fundamentalRules' | 'chartPatternRules'>> = {}) {
@@ -45,6 +57,9 @@ export class ScreeningRuleset {
     this.epsYoyGrowth = overrides.epsYoyGrowth ?? new EpsYoyGrowthRule(25);
     this.quarterlyEpsYoy = overrides.quarterlyEpsYoy ?? new QuarterlyEpsYoyRule();
     this.cumulativeGrowthPace = overrides.cumulativeGrowthPace ?? new CumulativeGrowthPaceRule();
+    this.opYoyGrowth = overrides.opYoyGrowth ?? new OpYoyGrowthRule(25);
+    this.quarterlyOpYoy = overrides.quarterlyOpYoy ?? new QuarterlyOpYoyRule();
+    this.cumulativeOpGrowthPace = overrides.cumulativeOpGrowthPace ?? new CumulativeOpGrowthPaceRule();
     this.chartPattern = overrides.chartPattern ?? new ChartPatternRule(ChartPattern.VCP, 60);
   }
 
@@ -60,7 +75,14 @@ export class ScreeningRuleset {
   }
 
   get fundamentalRules(): ScreeningRule[] {
-    return [this.epsYoyGrowth, this.quarterlyEpsYoy, this.cumulativeGrowthPace];
+    return [
+      this.epsYoyGrowth,
+      this.quarterlyEpsYoy,
+      this.cumulativeGrowthPace,
+      this.opYoyGrowth,
+      this.quarterlyOpYoy,
+      this.cumulativeOpGrowthPace,
+    ];
   }
 
   /** Not part of the V1 pass/fail gate — see _docs/DECISIONS.md. */

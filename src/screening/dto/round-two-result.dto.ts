@@ -4,9 +4,12 @@ import { EpsHistoryDto } from './eps-period.dto';
 
 /**
  * "Round 2" = round-1 passers (technical rules) whose stored fundamentals
- * also clear every fundamental rule — strict pass/fail gate on both
- * sections combined. Fundamentals come from quarter_results (populated by
- * scripts/pull-fundamentals.ts), never a live API call.
+ * clear the fundamental gate — two independent "buckets" of 3 rules each
+ * (EPS, Operating Profit), a symbol passes if EITHER bucket clears its own
+ * 2-of-3. `fundamentalRules` is the flat list of all 6 individual results;
+ * `fundamentalsPassed` is the bucket-OR outcome actually used to decide
+ * inclusion in this list. Fundamentals come from quarter_results (populated
+ * by scripts/pull-fundamentals.ts), never a live API call.
  */
 export class RoundTwoResultDto {
   @ApiProperty({ example: 'ADANIENT' })
@@ -27,8 +30,18 @@ export class RoundTwoResultDto {
   @ApiProperty({ type: () => RuleResult, isArray: true })
   technicalRules: RuleResult[];
 
-  @ApiProperty({ type: () => RuleResult, isArray: true })
+  @ApiProperty({
+    type: () => RuleResult,
+    isArray: true,
+    description: 'Flat list of all 6 fundamental rule results — the first 3 are the EPS bucket, the last 3 the Operating Profit bucket.',
+  })
   fundamentalRules: RuleResult[];
+
+  @ApiProperty({
+    example: true,
+    description: 'Whether the EPS bucket OR the Operating Profit bucket cleared its own 2-of-3 gate — this is what determines inclusion in round 2, not a flat count across all 6 rules.',
+  })
+  fundamentalsPassed: boolean;
 
   @ApiProperty({ type: () => EpsHistoryDto })
   epsHistory: EpsHistoryDto;

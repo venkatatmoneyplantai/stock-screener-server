@@ -52,6 +52,7 @@ export class StoredFundamentalsAdapter implements FundamentalsPort {
         otherIncome,
         totalIncome: revenue + otherIncome,
         expenses: row.expenses[period] ?? 0,
+        operatingProfit: row.operatingProfit[period] ?? 0,
         profitBeforeTax: row.profitBeforeTax[period] ?? 0,
         netProfit: row.netProfit[period] ?? 0,
         basicEps: row.epsInRs[period] ?? 0,

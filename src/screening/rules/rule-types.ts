@@ -151,6 +151,38 @@ export class CumulativeGrowthPaceRule implements ScreeningRule {
   readonly label = 'Cumulative quarterly EPS growth this FY on pace to beat last FY';
 }
 
+/**
+ * The Operating-Profit-based mirror of EpsYoyGrowthRule/QuarterlyEpsYoyRule/
+ * CumulativeGrowthPaceRule — same three checks, same shared 2-of-3 bucket
+ * logic, but against Operating Profit instead of EPS. A stock clears round
+ * 2 if EITHER the EPS bucket or this OP bucket passes its own 2-of-3 — see
+ * evaluateFundamentalRules and _docs/DECISIONS.md.
+ */
+export class OpYoyGrowthRule implements ScreeningRule {
+  readonly category = RuleCategory.FUNDAMENTAL;
+  readonly id = 'op-yoy-growth';
+
+  constructor(readonly minGrowthPct: number) {}
+
+  get label(): string {
+    return `YoY Operating Profit growth >= ${this.minGrowthPct}%`;
+  }
+}
+
+/** Latest quarter's Operating Profit vs. the same quarter one year prior. */
+export class QuarterlyOpYoyRule implements ScreeningRule {
+  readonly category = RuleCategory.FUNDAMENTAL;
+  readonly id = 'quarterly-op-yoy';
+  readonly label = 'Quarterly Operating Profit YoY comparison';
+}
+
+/** Same "on pace to beat last FY" check as CumulativeGrowthPaceRule, against Operating Profit. */
+export class CumulativeOpGrowthPaceRule implements ScreeningRule {
+  readonly category = RuleCategory.FUNDAMENTAL;
+  readonly id = 'cumulative-op-growth-pace';
+  readonly label = 'Cumulative quarterly Operating Profit growth this FY on pace to beat last FY';
+}
+
 export enum ChartPattern {
   VCP = 'VCP',
 }

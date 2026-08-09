@@ -64,6 +64,7 @@ export class IndianApiAdapter implements FundamentalsPort {
         otherIncome,
         totalIncome: revenue + otherIncome,
         expenses,
+        operatingProfit: data['Operating Profit']?.[period] ?? 0,
         profitBeforeTax: data['Profit before tax']?.[period] ?? 0,
         netProfit: data['Net Profit']?.[period] ?? 0,
         basicEps: data['EPS in Rs']?.[period] ?? 0,

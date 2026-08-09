@@ -6,6 +6,7 @@ export interface QuarterlyFinancials {
   otherIncome: number;
   totalIncome: number;
   expenses: number;
+  operatingProfit: number;
   profitBeforeTax: number;
   netProfit: number;
   basicEps: number;

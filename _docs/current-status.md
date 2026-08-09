@@ -32,7 +32,7 @@ work see `_docs/TODO.md`; for why things are the way they are, see
 - NestJS API boots cleanly and serves:
   - `GET /<prefix>/screening/results` — full universe, all rules, ranked by score.
   - `GET /<prefix>/screening/round-one` — technical rules only, strict pass/fail. Currently 125 of ~3,122 real symbols pass, sorted by market cap.
-  - `GET /<prefix>/screening/round-two` — round-1 passers whose STORED fundamentals clear at least 2 of 3 fundamental rules (not a strict all-must-pass gate — see `_docs/architecture/rounds.md`). Currently 38 of 125. Never calls the live API — reads `quarter_results` only.
+  - `GET /<prefix>/screening/round-two` — round-1 passers whose STORED fundamentals clear either of two "buckets" (EPS, Operating Profit), each needing 2-of-3 of its own rules (not a strict all-must-pass gate — see `_docs/architecture/rounds.md`). Currently 43 of 124. Never calls the live API — reads `quarter_results` only.
   - `GET /<prefix>/health` — service + database connectivity check.
   - Swagger UI with tagged, described, exampled endpoints.
 - `market-data` — real: `NseBhavcopyAdapter` reads `daily_bhavcopy_records`, populated by `npm run backfill:bhavcopy` (NSE's daily Bhavcopy file). Local Postgres has the full history back to 2021; Supabase (production) has 2024–present only, trimmed to fit the free tier's 500 MB cap.
@@ -43,7 +43,7 @@ work see `_docs/TODO.md`; for why things are the way they are, see
   - `StoredFundamentalsAdapter` — reads `quarter_results` (never the network). This is what `screenRoundTwo()` actually uses.
   - 7 raw storage tables exist (`quarter_results`, `yoy_results`, `balance_sheets`, `cash_flows`, `ratios`, `shareholding_patterns_quarterly`, `shareholding_patterns_yearly` — one JSONB column per metric, insert-and-keep). Only `quarter_results` is populated so far.
 - `indicators/` has working implementations of DMA, 52-week high/low, turnover, and a first-pass VCP heuristic (VCP not wired into V1 screening — see DECISIONS.md).
-- `screening/rules/` implements all technical and fundamental rules as typed, configurable rule objects (`ScreeningRuleset`). Fundamental rules are 3 (EPS YoY growth, quarterly EPS YoY, cumulative growth pace), passing 2-of-3 — not a strict AND gate.
+- `screening/rules/` implements all technical and fundamental rules as typed, configurable rule objects (`ScreeningRuleset`). Fundamental rules are two 3-rule "buckets" — EPS (YoY growth, quarterly YoY, cumulative growth pace) and Operating Profit (same 3 checks) — each independently needing 2-of-3, combined with OR at the round-2 level. See `_docs/architecture/rounds.md`.
 
 ## Deployment
 
@@ -146,9 +146,10 @@ convention.
 
 - Full technical + fundamental screening pipeline, end to end, on real
   data: real prices, real universe (~3,122 symbols), real market cap, all
-  6 technical + 3 fundamental rules, two dedicated pass-list endpoints
-  (`round-one`, `round-two`) — verified live, both rule sets confirmed
-  with no leaks.
+  6 technical rules + 6 fundamental rules (2 buckets of 3, EPS/Operating
+  Profit, either bucket's 2-of-3 clears round 2), two dedicated pass-list
+  endpoints (`round-one`, `round-two`) — verified live, both rule sets
+  confirmed with no leaks.
 - Dashboard client built and verified against real data.
 - Server + database deployed and live (Vercel + Supabase), verified with
   real request timings against production data.

@@ -12,10 +12,11 @@ The round split itself — which rules belong to round 1 vs round 2 — is
 via `ScreeningRuleset`.
 
 **Round 1 is a strict pass/fail gate** — a symbol only appears if it clears
-**every** technical rule. **Round 2 is not** — a symbol appears if it
-clears at least `MIN_FUNDAMENTAL_RULES_TO_PASS` (currently 2) of its 3
-fundamental rules. See `_docs/DECISIONS.md` for why the two rounds use
-different gate styles.
+**every** technical rule. **Round 2 is not** — its 6 fundamental rules are
+split into two independent "buckets" of 3 (EPS, Operating Profit), each
+needing 2-of-3 to pass on its own; a symbol appears if **either** bucket
+passes. See _docs/DECISIONS.md for why the two rounds use different gate
+styles, and the bucket note below for why round 2 has two of them.
 
 ## Round 1 — technical
 
@@ -36,14 +37,42 @@ history only (`daily_bhavcopy_records`) plus market cap
 
 `GET /screening/round-two`. Runs only against round-1 passers. Uses
 stored fundamentals (`quarter_results`, populated by
-`npm run pull:fundamentals`) — never a live API call. **At least 2 of the
-3 rules below must pass** — not all 3 (see note above).
+`npm run pull:fundamentals`) — never a live API call.
+
+Two buckets, same 3-rule shape, different metric. **A symbol passes round
+2 if either bucket clears its own 2-of-3** — the buckets are evaluated
+independently and combined with OR, not summed together.
+
+### Bucket A — EPS
 
 | # | Rule | Current value |
 | --- | --- | --- |
 | 1 | YoY EPS growth | ≥ 25% |
 | 2 | Quarterly EPS YoY comparison | This quarter's EPS > the same quarter last year |
 | 3 | Cumulative growth pace vs. last FY | Sum of this FY's completed quarters' YoY growth % ≥ last full FY's overall EPS growth % |
+
+### Bucket B — Operating Profit
+
+Exact same 3-rule shape as Bucket A, applied to Operating Profit instead
+of EPS (already present in stored `quarter_results` data, no new pull
+needed).
+
+| # | Rule | Current value |
+| --- | --- | --- |
+| 1 | YoY Operating Profit growth | ≥ 25% |
+| 2 | Quarterly Operating Profit YoY comparison | This quarter's Operating Profit > the same quarter last year |
+| 3 | Cumulative growth pace vs. last FY | Sum of this FY's completed quarters' YoY OP growth % ≥ last full FY's overall OP growth % |
+
+### If a bucket rule can't be evaluated (insufficient data)
+
+That rule is **excluded from its bucket's own count**, not counted as a
+failure — "rely on whatever data we have," per an explicit product
+decision. The pass threshold generalizes "2 of 3" to however many rules in
+the bucket actually had enough data: pass if `passed >= ceil(available *
+2/3)`, and a bucket with zero available rules never passes (no evidence
+either way). In practice this only matters for very early-listed stocks —
+Operating Profit is already in the same API response as EPS, so it's
+rarely absent when EPS isn't.
 
 ## Not in either round
 
@@ -64,6 +93,8 @@ in `src/screening/rules/screening-ruleset.ts`. To change a number (e.g.
 the round logic or the evaluation functions, which read the values off the
 ruleset rather than hardcoding them.
 
-The round 2 pass threshold (`MIN_FUNDAMENTAL_RULES_TO_PASS = 2`) is a
-constant in `screening.service.ts`, not part of `ScreeningRuleset` — it's a
-property of the round-2 gate itself, not of any individual rule.
+The round 2 bucket-pass math (2-of-3, generalizing to available rules when
+data's missing) lives in `evaluateGrowthBucket()` in
+`src/screening/rules/fundamental-rules.ts` — it's shared code, not
+duplicated per bucket, since both buckets are the same 3-rule shape
+evaluated against a different metric selector (EPS vs Operating Profit).

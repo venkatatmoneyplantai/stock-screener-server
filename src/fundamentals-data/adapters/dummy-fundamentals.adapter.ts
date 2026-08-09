@@ -46,6 +46,7 @@ export class DummyFundamentalsAdapter implements FundamentalsPort {
         otherIncome,
         totalIncome: revenue + otherIncome,
         expenses,
+        operatingProfit: revenue - expenses,
         profitBeforeTax: 100 - i * 5,
         netProfit: 75 - i * 4,
         basicEps,
