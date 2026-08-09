@@ -1,4 +1,7 @@
+import { QuarterlyFinancials } from '../interfaces/fundamentals-port.interface';
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const PERIOD_LABEL_PATTERN = /^Q(\d)\s*FY(\d+)$/;
 
 /** "Jun 2023" -> { periodLabel: "Q1 FY24", periodEnd: "2023-06-30" }. Indian FY runs Apr-Mar. */
 export function monthYearToFiscalPeriod(label: string): { periodLabel: string; periodEnd: string } {
@@ -42,4 +45,23 @@ export function monthYearSortKey(label: string): number {
   const year = Number(yearStr);
   if (month === -1 || Number.isNaN(year)) return -Infinity;
   return year * 12 + month;
+}
+
+export interface ParsedQuarter {
+  quarter: QuarterlyFinancials;
+  quarterNumber: number;
+  fiscalYear: number;
+}
+
+/** Parses a "Qn FYyy" periodLabel (as produced by monthYearToFiscalPeriod) back into its quarter number and fiscal year. */
+export function parseQuarterPeriod(quarter: QuarterlyFinancials): ParsedQuarter | null {
+  const match = PERIOD_LABEL_PATTERN.exec(quarter.periodLabel.trim());
+  if (!match) return null;
+  return { quarter, quarterNumber: Number(match[1]), fiscalYear: Number(match[2]) };
+}
+
+/** Percentage change from `previous` to `current`. Null if previous is 0 (undefined growth rate). */
+export function percentGrowth(current: number, previous: number): number | null {
+  if (previous === 0) return null;
+  return ((current - previous) / Math.abs(previous)) * 100;
 }

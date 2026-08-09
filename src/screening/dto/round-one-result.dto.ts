@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { RuleResult } from '../rules/rule-result.type';
+import { TechnicalSnapshotDto } from './technical-snapshot.dto';
 
 /**
  * "Round 1" = the technical rules only (price/volume-based), evaluated as
@@ -26,4 +27,7 @@ export class RoundOneResultDto {
 
   @ApiProperty({ type: () => RuleResult, isArray: true })
   technicalRules: RuleResult[];
+
+  @ApiProperty({ type: () => TechnicalSnapshotDto })
+  technicalSnapshot: TechnicalSnapshotDto;
 }

@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { RuleResult } from '../rules/rule-result.type';
 import { EpsHistoryDto } from './eps-period.dto';
+import { TechnicalSnapshotDto } from './technical-snapshot.dto';
+import { FundamentalsTableDto } from './fundamentals-table.dto';
 
 /**
  * "Round 2" = round-1 passers (technical rules) whose stored fundamentals
@@ -30,6 +32,9 @@ export class RoundTwoResultDto {
   @ApiProperty({ type: () => RuleResult, isArray: true })
   technicalRules: RuleResult[];
 
+  @ApiProperty({ type: () => TechnicalSnapshotDto })
+  technicalSnapshot: TechnicalSnapshotDto;
+
   @ApiProperty({
     type: () => RuleResult,
     isArray: true,
@@ -45,4 +50,7 @@ export class RoundTwoResultDto {
 
   @ApiProperty({ type: () => EpsHistoryDto })
   epsHistory: EpsHistoryDto;
+
+  @ApiProperty({ type: () => FundamentalsTableDto })
+  fundamentalsTable: FundamentalsTableDto;
 }

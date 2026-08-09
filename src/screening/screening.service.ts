@@ -4,19 +4,24 @@ import {
   MARKET_DATA_SERVICE,
   UNIVERSE_SERVICE,
 } from '../common/constants/provider-tokens';
-import { MarketDataPort } from '../market-data/interfaces/market-data-port.interface';
+import { DailyBar, MarketDataPort } from '../market-data/interfaces/market-data-port.interface';
 import { FundamentalsPort } from '../fundamentals-data/interfaces/fundamentals-port.interface';
 import { StoredFundamentalsAdapter } from '../fundamentals-data/adapters/stored-fundamentals.adapter';
 import { UniversePort } from '../universe/interfaces/universe-port.interface';
 import { evaluateTechnicalRules } from './rules/technical-rules';
-import { fiftyTwoWeekHigh } from '../indicators/week52.util';
+import { fiftyTwoWeekHigh, fiftyTwoWeekLow } from '../indicators/week52.util';
+import { simpleMovingAverage } from '../indicators/moving-average.util';
 import { evaluateFundamentalRules } from './rules/fundamental-rules';
 import { evaluateChartPatternRules } from './rules/chart-pattern-rules';
+import { computeFundamentalsTable } from '../fundamentals-data/utils/fundamentals-table.util';
 import { ScreeningRuleset } from './rules/screening-ruleset';
 import { MarketCapMinRule } from './rules/rule-types';
 import { ScreeningResultDto } from './dto/screening-result.dto';
 import { RoundOneResultDto } from './dto/round-one-result.dto';
 import { RoundTwoResultDto } from './dto/round-two-result.dto';
+import { TechnicalSnapshotDto } from './dto/technical-snapshot.dto';
+
+const TRADING_DAYS_PER_WEEK = 5;
 
 const HISTORY_LOOKBACK_DAYS = 400; // enough for 200DMA + 8-week-old 200DMA + 52wk hi/lo
 
@@ -87,12 +92,14 @@ export class ScreeningService {
       // always has both values, so this is only ever 0 for a symbol that's
       // about to be filtered out below anyway.
       const percentOf52WeekHigh = lastClose !== null && week52High !== null && week52High > 0 ? lastClose / week52High : 0;
+      const technicalSnapshot = this.buildTechnicalSnapshot(bars, ruleset, lastClose, week52High);
       return {
         symbol: entry.symbol,
         companyName: entry.companyName,
         marketCapCr: entry.marketCapCr,
         percentOf52WeekHigh,
         technicalRules,
+        technicalSnapshot,
       };
     });
 
@@ -127,11 +134,37 @@ export class ScreeningService {
         ]);
         const { results: fundamentalRules, passed: fundamentalsPassed } = evaluateFundamentalRules(quarters, this.ruleset);
         const epsHistory = { quarterly: quarterlyEps, annual: annualEps };
-        return { ...entry, fundamentalRules, fundamentalsPassed, epsHistory };
+        const fundamentalsTable = computeFundamentalsTable(quarters);
+        return { ...entry, fundamentalRules, fundamentalsPassed, epsHistory, fundamentalsTable };
       }),
     );
 
     return results.filter((r) => r.fundamentalsPassed).sort((a, b) => b.marketCapCr - a.marketCapCr);
+  }
+
+  /** The same values the technical rules already compute, exposed as structured fields instead of only inside rule detail strings. */
+  private buildTechnicalSnapshot(
+    bars: DailyBar[],
+    ruleset: ScreeningRuleset,
+    lastClose: number | null,
+    week52High: number | null,
+  ): TechnicalSnapshotDto {
+    const dma200 = simpleMovingAverage(bars, ruleset.movingAverageTrend.period);
+    const week52Low = fiftyTwoWeekLow(bars);
+    return {
+      close: lastClose ?? 0,
+      dma50: simpleMovingAverage(bars, 50),
+      dma200,
+      dma200EightWeeksAgo: simpleMovingAverage(
+        bars,
+        ruleset.movingAverageTrend.period,
+        ruleset.movingAverageTrend.lookbackWeeks * TRADING_DAYS_PER_WEEK,
+      ),
+      week52High,
+      week52Low,
+      nearHighThreshold: week52High !== null ? ruleset.percentOfHigh.multiple * week52High : null,
+      aboveLowThreshold: week52Low !== null ? ruleset.percentAboveLow.multiple * week52Low : null,
+    };
   }
 
   private historyRange(): { fromDate: string; toDate: string } {

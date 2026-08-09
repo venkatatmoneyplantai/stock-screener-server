@@ -1,26 +1,9 @@
 import { QuarterlyFinancials } from '../../fundamentals-data/interfaces/fundamentals-port.interface';
+import { ParsedQuarter, parseQuarterPeriod, percentGrowth } from '../../fundamentals-data/utils/fiscal-period.util';
 import { RuleResult } from './rule-result.type';
 import { ScreeningRuleset } from './screening-ruleset';
 
 const QUARTERS_PER_YEAR = 4;
-const PERIOD_LABEL_PATTERN = /^Q(\d)\s*FY(\d+)$/;
-
-function percentGrowth(current: number, previous: number): number | null {
-  if (previous === 0) return null;
-  return ((current - previous) / Math.abs(previous)) * 100;
-}
-
-interface ParsedQuarter {
-  quarter: QuarterlyFinancials;
-  quarterNumber: number;
-  fiscalYear: number;
-}
-
-function parsePeriod(quarter: QuarterlyFinancials): ParsedQuarter | null {
-  const match = PERIOD_LABEL_PATTERN.exec(quarter.periodLabel.trim());
-  if (!match) return null;
-  return { quarter, quarterNumber: Number(match[1]), fiscalYear: Number(match[2]) };
-}
 
 interface RuleOutcome {
   result: RuleResult;
@@ -40,7 +23,7 @@ function evaluateCumulativeGrowthPace(
   metric: (q: QuarterlyFinancials) => number,
   label: string,
 ): RuleOutcome {
-  const parsed = quarters.map(parsePeriod);
+  const parsed = quarters.map(parseQuarterPeriod);
   if (parsed.some((p) => p === null) || parsed.length === 0) {
     return {
       result: { rule: label, passed: false, detail: 'could not parse fiscal period labels (expected "Qn FYyy")' },
